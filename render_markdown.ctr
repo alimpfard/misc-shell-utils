@@ -1,0 +1,60 @@
+#!/bin/env ctr
+
+import Library/Utils/Colors.
+
+var args is Array new fill: Program argCount with: \:i Program argument: i.
+var debug is args contains: '-d'.
+var nopygment is args contains: '-l'.
+var errstream is (File special: 'stderr').
+
+var bold_r is '%s$1%s' % [Colors bold, Colors bold_off].
+var italic_r is '%s$2%s' % [Colors italic, Colors italic_off].
+var strike_r is '%s$1%s' % [Colors overline, Colors overline_off].
+var quote_r is '%s$1%s' % [Colors blue, Colors default].
+var code_r is '%s$1%s' % [Colors cyan, Colors default].
+var rule_r is '\n%s--------------------%s' % [Colors faint, Colors reset].
+
+var render is {:text
+  text is '\n' + text trim + '\n'.
+  rules each: \:reg:replacement
+    (Reflect isObject: replacement linkedTo: CodeBlock) either: {
+      text is text findPattern: reg do: replacement options: 'g'.
+    } or: {
+      text is text regex: reg substitute: replacement options: 'g'.
+    }.
+  ^text trim.
+}.
+
+var header is \:groups '\n%s%s%s' % [Colors blink + Colors bold, render[groups @ 2], Colors blink_off + Colors bold_off].
+var link is \:groups '%s\x1b]8;;%s\a%s\x1b]8;;\a%s' % [Colors italic + Colors green, groups @ 2, render[groups @ 1], Colors italic_off + Colors default].
+var para is \:groups '\n' + (groups @ 1) + '\n'.
+var ul_list is \:groups '\n\t%s%s%s %s' % [Colors magenta, (['*', '+', '-'] contains: groups @ 1, either: '•' or: groups @ 1), Colors default, render[groups @ 2] ].
+var ol_list is ul_list.
+var blockquote is \:groups '\n' + (groups @ 2) + '\n'.
+var codeb_r is \:groups
+  'text' letEqual: (groups @ 3) in: {\
+    nopygment either: '%s%s%s' % [Colors cyan, text, Colors default]
+    or: \:_
+      'syn' letEqual: ((groups @ 2) = '' either: '' or: '-l ' + (groups @ 2)) in: {
+        debug ifTrue: { errstream write: 'calling into pygmentize, may take a while...\n'. }.
+        text is 'echo "%s" | pygmentize %s' % [text escapeDoubleQuotes, syn].
+        ^Shell call: text.
+      }.
+  }.
+
+var rules is Map new
+  put: para         at: ?>\n([^\n]+)\n<?,                    # add paragraphs.
+  put: rule_r       at: ?>\n-{5,}<?,                         # horizontal rule
+  put: blockquote   at: ?>\n(>|\>)(.*)<?,                    # blockquotes
+  put: ol_list      at: ?>\n([0-9]+)\.(.*)<?,                # ol lists
+  put: code_r       at: ?>(?s)`(.*?)`<?,                     # inline code
+  put: quote_r      at: ?>\:\"(.*?)\"\:<?,                   # quote
+  put: strike_r     at: ?>\~\~(.*?)\~\~<?,                   # del
+  put: italic_r     at: ?>(\*|_)(.*?)\1<?,                   # emphasis
+  put: bold_r       at: ?>(\*\*|__)(.*?)\1<?,                # bold
+  put: ul_list      at: ?>\n(\*|\+|-)(.*)<?,                 # ul lists
+  put: link         at: ?>\[(.+)\]\(([^\)]+)\)<?,            # links
+  put: header       at: ?>(\#+)(.*)<?,                       # headers
+  put: codeb_r      at: ?>(?s)(```)(\w*)(.*?)(```)<?.
+
+Pen writeln: render[Program input].
