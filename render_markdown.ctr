@@ -1,5 +1,7 @@
 #!/bin/env ctr
 
+Broom memoryLimit: 1024 * 1024 * 1024 * 4.
+
 import Library/Utils/Colors.
 
 var args is Array new fill: Program argCount with: \:i Program argument: i.
@@ -25,7 +27,12 @@ var render is {:text
   ^text trim.
 }.
 
-var header is \:groups '\n%s%s%s' % [Colors blink + Colors bold, render[groups @ 2], Colors blink_off + Colors bold_off].
+var header is {:groups
+    var ren is render[groups @ 2].
+    var count is groups at: 1, length = 1.
+    var res is (count either: '—' or: '.') * ren length.
+    ^'\n%s\n%s%s%s\n%s' % [res, Colors blink + Colors bold, ren, Colors blink_off + Colors bold_off, res].
+}.
 var link is \:groups '%s\x1b]8;;%s\a%s\x1b]8;;\a%s' % [Colors italic + Colors green, groups @ 2, render[groups @ 1], Colors italic_off + Colors default].
 var para is \:groups '\n' + (groups @ 1) + '\n'.
 var ul_list is \:groups '\n\t%s%s%s %s' % [Colors magenta, (['*', '+', '-'] contains: groups @ 1, either: '•' or: groups @ 1), Colors default, render[groups @ 2] ].
@@ -42,6 +49,16 @@ var codeb_r is \:groups
       }.
   }.
 
+var table-header is \:header
+    (header trim split: '|', join: '\t\t').
+
+var table-rows is \:rows
+    rows filter: \:x x trim, fmap: table-header, join: '\n'.
+
+var table_r is \:groups
+    table-header[groups @ 1] + '\n' +
+    table-rows[groups @ 3 split: '\n', fmap: \:x x trim].
+
 var rules is Map new
   put: para         at: ?>\n([^\n]+)\n<?,                    # add paragraphs.
   put: rule_r       at: ?>\n-{5,}<?,                         # horizontal rule
@@ -54,7 +71,8 @@ var rules is Map new
   put: bold_r       at: ?>(\*\*|__)(.*?)\1<?,                # bold
   put: ul_list      at: ?>\n(\*|\+|-)(.*)<?,                 # ul lists
   put: link         at: ?>\[(.+)\]\(([^\)]+)\)<?,            # links
-  put: header       at: ?>(\#+)(.*)<?,                       # headers
-  put: codeb_r      at: ?>(?s)(```)(\w*)(.*?)(```)<?.
+  put: header       at: ?>(?<=\n)(\#+)([^\n]*)<?,            # headers
+  put: table_r      at: ?>(?m)(\|[^\n]+\|\r?\n)((?:\|[ ]*:?[-]+:?[ ]*)+\|)(\r?\n(?:\|[^\n]+\|\r?\n?)*)?<?,
+  put: codeb_r      at: ?>(?s)(?:(```)(\w*)(.*?)(```))<?.
 
 Pen writeln: render[Program input].
